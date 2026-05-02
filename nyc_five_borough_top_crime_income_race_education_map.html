@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NYC Five Boroughs — Top Crime Interactive Map</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #f4f6f8;
+    color: #1f2933;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  .container {
+    max-width: 1180px;
+    margin: 0 auto;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 26px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+  }
+  h1 {
+    margin: 0 0 6px;
+    color: #1F4E79;
+    font-size: 24px;
+    line-height: 1.2;
+  }
+  .subtitle {
+    margin: 0 0 18px;
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .ctrl-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .ctrl-label {
+    font-size: 12px;
+    color: #475569;
+    font-weight: 700;
+    margin-right: 2px;
+  }
+  .ctrl-btn {
+    padding: 7px 13px;
+    font-size: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    color: #1f2933;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .ctrl-btn:hover { background: #eef2f7; }
+  .ctrl-btn.active {
+    background: #1F4E79;
+    color: #fff;
+    border-color: #1F4E79;
+  }
+  .status {
+    border-radius: 10px;
+    padding: 11px 13px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    line-height: 1.45;
+    border: 1px solid #d5dbe1;
+    background: #f8fafc;
+    color: #334155;
+  }
+  .status.ok {
+    border-color: #b7dfc1;
+    background: #f3fbf5;
+    color: #1c6b3e;
+  }
+  .status.error {
+    border-color: #efb4b4;
+    background: #fff5f5;
+    color: #8b1e1e;
+  }
+  .main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
+    gap: 18px;
+    align-items: start;
+  }
+  #map-wrap {
+    position: relative;
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #cde7f7;
+  }
+  #map-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 520px;
+  }
+  .borough-path {
+    cursor: pointer;
+    stroke: #ffffff;
+    stroke-width: 1.2;
+    vector-effect: non-scaling-stroke;
+  }
+  .borough-path:hover {
+    stroke: #111827;
+    stroke-width: 2.3;
+  }
+  .borough-label {
+    pointer-events: none;
+    font-weight: 700;
+    font-size: 13px;
+    fill: #0f172a;
+    paint-order: stroke;
+    stroke: rgba(255,255,255,0.88);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+  .bubble {
+    cursor: pointer;
+    fill: rgba(31,78,121,0.58);
+    stroke: #123a5c;
+    stroke-width: 1.5;
+  }
+  .tooltip {
+    position: fixed;
+    display: none;
+    max-width: 310px;
+    background: #fff;
+    border: 1px solid #d8dee4;
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+    pointer-events: none;
+    z-index: 999;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .tt-title { font-size: 14px; font-weight: 800; color:#1F4E79; margin-bottom: 4px; }
+  .tt-sub { color:#475569; margin-bottom: 8px; }
+  .tt-row { display:flex; justify-content:space-between; gap:16px; border-top:1px solid #eef2f7; padding-top:5px; margin-top:5px; }
+  .tt-val { font-weight:700; color:#111827; text-align:right; }
+  .panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fbfcfe;
+    padding: 15px;
+  }
+  .panel h2 {
+    margin: 0 0 10px;
+    color: #1F4E79;
+    font-size: 17px;
+  }
+  .legend {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #475569;
+    margin: 10px 0 0;
+  }
+  .legend-swatch {
+    width: 18px;
+    height: 12px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+  .year-row {
+    margin: 8px 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color:#475569;
+    font-size: 13px;
+  }
+  input[type="range"] { width: 220px; }
+  select {
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 7px 10px;
+    font-size: 12px;
+    background: #fff;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 6px;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: top;
+  }
+  th {
+    color: #475569;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+  .crime-pill {
+    display:inline-block;
+    padding:3px 7px;
+    border-radius:999px;
+    background:#eaf2fb;
+    color:#1F4E79;
+    font-size:11px;
+    font-weight:700;
+  }
+  .income-pill {
+    display:inline-block;
+    padding:3px 7px;
+    border-radius:999px;
+    background:#eef7ed;
+    color:#1D6B3E;
+    font-size:11px;
+    font-weight:700;
+  }
+  .race-pill {
+    display:inline-block;
+    padding:3px 7px;
+    border-radius:999px;
+    background:#f3edf9;
+    color:#5b2a86;
+    font-size:11px;
+    font-weight:700;
+  }
+  .edu-pill {
+    display:inline-block;
+    padding:3px 7px;
+    border-radius:999px;
+    background:#fff3df;
+    color:#9a5b00;
+    font-size:11px;
+    font-weight:700;
+  }
+  .note {
+    margin-top: 14px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.5;
+  }
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; }
+    #map-svg { min-height: 430px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>NYC Five Boroughs: Top Crime Interactive Map</h1>
+  <p class="subtitle">
+    Hover over each borough to see the leading NYPD complaint category for the selected year.
+    Use the controls to switch between the top crime view, a specific crime category, raw counts, borough share, choropleth, and bubble views.
+  </p>
+
+  <div id="status" class="status">Loading NYC borough boundaries and NYPD complaint data…</div>
+
+  <div class="ctrl-bar">
+    <span class="ctrl-label">View</span>
+    <button class="ctrl-btn active" id="btn-top" onclick="setMode('top')">Top crime by borough</button>
+    <button class="ctrl-btn" id="btn-specific" onclick="setMode('specific')">Specific crime</button>
+    <button class="ctrl-btn" id="btn-income" onclick="setMode('income')">Income levels</button>
+    <button class="ctrl-btn" id="btn-race" onclick="setMode('race')">Racial/ethnic data</button>
+    <button class="ctrl-btn" id="btn-education" onclick="setMode('education')">Education levels</button>
+    <select id="crimeSelect" onchange="setCrime(this.value)" disabled>
+      <option value="">Loading crime categories…</option>
+    </select>
+    <select id="raceSelect" onchange="setRaceGroup(this.value)" disabled>
+      <option value="Black or African American alone, not Hispanic">Black alone, not Hispanic</option>
+      <option value="Hispanic or Latino">Hispanic or Latino</option>
+      <option value="White alone, not Hispanic">White alone, not Hispanic</option>
+      <option value="Asian alone, not Hispanic">Asian alone, not Hispanic</option>
+      <option value="Two or more races, not Hispanic">Two or more races, not Hispanic</option>
+      <option value="Some other race alone, not Hispanic">Some other race alone, not Hispanic</option>
+      <option value="American Indian/Alaska Native alone, not Hispanic">AIAN alone, not Hispanic</option>
+      <option value="Native Hawaiian/Pacific Islander alone, not Hispanic">NHPI alone, not Hispanic</option>
+    </select>
+    <select id="educationSelect" onchange="setEducationGroup(this.value)" disabled>
+      <option value="Bachelor's degree or higher">Bachelor's degree or higher</option>
+      <option value="Graduate or professional degree">Graduate or professional degree</option>
+      <option value="High school graduate or higher">High school graduate or higher</option>
+      <option value="Less than high school diploma">Less than high school diploma</option>
+      <option value="Some college or associate's degree">Some college or associate's degree</option>
+      <option value="Bachelor's degree">Bachelor's degree</option>
+    </select>
+
+    <span class="ctrl-label" style="margin-left:8px;">Measure</span>
+    <button class="ctrl-btn active" id="btn-count" onclick="setMeasure('count')">Raw count</button>
+    <button class="ctrl-btn" id="btn-share" onclick="setMeasure('share')">Share of borough crime</button>
+
+    <span class="ctrl-label" style="margin-left:8px;">Map type</span>
+    <button class="ctrl-btn active" id="btn-choro" onclick="setMapType('choropleth')">Choropleth</button>
+    <button class="ctrl-btn" id="btn-bubble" onclick="setMapType('bubble')">Bubble</button>
+  </div>
+
+  <div class="year-row">
+    <strong>Year: <span id="yearLabel">2025</span></strong>
+    <input type="range" min="2021" max="2025" step="1" value="2025" id="yearSlider" />
+  </div>
+
+  <div class="main-grid">
+    <div>
+      <div id="map-wrap">
+        <svg id="map-svg" viewBox="0 0 760 560" preserveAspectRatio="xMidYMid meet" aria-label="Interactive map of the five boroughs of New York City"></svg>
+      </div>
+      <div class="legend" id="legend"></div>
+      <p class="note">
+        Tip: if the map looks empty at first, wait for the green “loaded” message. The hover now attaches directly to the borough SVG paths and the bubble circles.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2 id="panelTitle">Borough ranking</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Borough</th>
+            <th>Crime category</th>
+            <th id="valueHeader">Count</th>
+          </tr>
+        </thead>
+        <tbody id="rankBody">
+          <tr><td colspan="3">Loading…</td></tr>
+        </tbody>
+      </table>
+      <p class="note" id="sourceNote">
+        Data sources: NYC Open Data, NYPD Complaint Data Historic and NYC Borough Boundaries; U.S. Census Bureau ACS 5-Year Tables B19013, B03002, and B15003 for income, race/ethnicity, and educational attainment.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const YEARS = [2021, 2022, 2023, 2024, 2025];
+const BOROUGHS = ['Bronx','Brooklyn','Manhattan','Queens','Staten Island'];
+const ALIASES = {
+  'the bronx': 'Bronx',
+  'bronx': 'Bronx',
+  'brooklyn': 'Brooklyn',
+  'kings': 'Brooklyn',
+  'manhattan': 'Manhattan',
+  'new york': 'Manhattan',
+  'queens': 'Queens',
+  'staten island': 'Staten Island',
+  'richmond': 'Staten Island'
+};
+const BORO_CODES = { '1':'Manhattan','2':'Bronx','3':'Brooklyn','4':'Queens','5':'Staten Island' };
+
+const COLORS = ['#E6F1FB','#B5D4F4','#85B7EB','#378ADD','#185FA5','#0C447C'];
+const FALLBACK_CATEGORIES = ['PETIT LARCENY','HARRASSMENT 2','ASSAULT 3 & RELATED OFFENSES','GRAND LARCENY','CRIMINAL MISCHIEF & RELATED OF','ROBBERY','FELONY ASSAULT'];
+
+let mode = 'top';
+let measure = 'count';
+let mapType = 'choropleth';
+let selectedYear = 2025;
+let selectedCrime = '';
+let geoFeatures = [];
+let crimeData = {}; // crimeData[year][borough][crime] = count
+let boroughTotals = {}; // boroughTotals[year][borough] = count
+let incomeData = {}; // incomeData[borough] = median household income
+let incomeSourceYear = '2024 ACS 5-Year';
+let raceData = {}; // raceData[borough][group] = {count, share}
+let raceSourceYear = '2024 ACS 5-Year';
+let selectedRaceGroup = 'Black or African American alone, not Hispanic';
+let educationData = {}; // educationData[borough][group] = {count, share}
+let educationSourceYear = '2024 ACS 5-Year';
+let selectedEducationGroup = "Bachelor's degree or higher";
+let crimeCategories = [];
+
+const svg = d3.select('#map-svg');
+const tooltip = document.getElementById('tooltip');
+const statusEl = document.getElementById('status');
+const rankBody = document.getElementById('rankBody');
+const legendEl = document.getElementById('legend');
+const crimeSelect = document.getElementById('crimeSelect');
+const raceSelect = document.getElementById('raceSelect');
+const educationSelect = document.getElementById('educationSelect');
+
+const width = 760, height = 560;
+const projection = d3.geoMercator();
+const path = d3.geoPath().projection(projection);
+
+function normalizeBoro(value) {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (BORO_CODES[raw]) return BORO_CODES[raw];
+  return ALIASES[raw.toLowerCase()] || raw;
+}
+
+function getBoroName(feature) {
+  const p = feature.properties || {};
+  const candidates = [
+    p.boro_name, p.BoroName, p.boroname, p.BORONAME, p.BORO_NAME,
+    p.name, p.NAME, p.county, p.COUNTY, p.boro_code, p.BoroCode, p.boro
+  ];
+  for (const c of candidates) {
+    const norm = normalizeBoro(c);
+    if (BOROUGHS.includes(norm)) return norm;
+  }
+  return null;
+}
+
+function fmt(n) { return Number(n || 0).toLocaleString(); }
+function pct(n) { return (Number(n || 0) * 100).toFixed(1) + '%'; }
+function safeCrime(c) { return c || 'No data'; }
+function fmtMoney(n) {
+  const val = Number(n || 0);
+  return val ? '$' + val.toLocaleString() : 'No data';
+}
+function incomeTier(n) {
+  const val = Number(n || 0);
+  if (!val) return 'No income data';
+  if (val < 60000) return 'Lower income';
+  if (val < 85000) return 'Moderate income';
+  if (val < 110000) return 'Higher income';
+  return 'Highest income';
+}
+function getIncomeMetric(borough) {
+  const income = Number(incomeData[borough] || 0);
+  const top = getTopCrime(selectedYear, borough);
+  return {
+    borough,
+    crime: 'Median household income',
+    count: top.count,
+    share: top.share,
+    income,
+    raceGroup: selectedRaceGroup,
+    raceCount: raceData[borough]?.[selectedRaceGroup]?.count || 0,
+    raceShare: raceData[borough]?.[selectedRaceGroup]?.share || 0,
+    educationGroup: selectedEducationGroup,
+    educationCount: educationData[borough]?.[selectedEducationGroup]?.count || 0,
+    educationShare: educationData[borough]?.[selectedEducationGroup]?.share || 0,
+    value: income,
+    topCrime: top.crime,
+    topCrimeCount: top.count,
+    topFive: top.topFive
+  };
+}
+function getLargestRaceGroup(borough) {
+  const obj = raceData[borough] || {};
+  const entries = Object.entries(obj).sort((a,b) => (b[1].share || 0) - (a[1].share || 0));
+  if (!entries.length) return { group: 'No race data', count: 0, share: 0 };
+  return { group: entries[0][0], count: entries[0][1].count, share: entries[0][1].share };
+}
+function getRaceMetric(borough) {
+  const top = getTopCrime(selectedYear, borough);
+  const selected = raceData[borough]?.[selectedRaceGroup] || {count: 0, share: 0};
+  const largest = getLargestRaceGroup(borough);
+  return {
+    borough,
+    crime: selectedRaceGroup,
+    count: top.count,
+    share: top.share,
+    income: Number(incomeData[borough] || 0),
+    raceGroup: selectedRaceGroup,
+    raceCount: selected.count || 0,
+    raceShare: selected.share || 0,
+    largestRaceGroup: largest.group,
+    largestRaceShare: largest.share,
+    educationGroup: selectedEducationGroup,
+    educationCount: educationData[borough]?.[selectedEducationGroup]?.count || 0,
+    educationShare: educationData[borough]?.[selectedEducationGroup]?.share || 0,
+    value: selected.share || 0,
+    topCrime: top.crime,
+    topCrimeCount: top.count,
+    topFive: top.topFive
+  };
+}
+function getRaceRows(borough) {
+  const obj = raceData[borough] || {};
+  return Object.entries(obj)
+    .map(([group, d]) => ({ group, count: d.count || 0, share: d.share || 0 }))
+    .sort((a,b) => b.share - a.share);
+}
+function getEducationMetric(borough) {
+  const top = getTopCrime(selectedYear, borough);
+  const selected = educationData[borough]?.[selectedEducationGroup] || {count: 0, share: 0};
+  return {
+    borough,
+    crime: selectedEducationGroup,
+    count: top.count,
+    share: top.share,
+    income: Number(incomeData[borough] || 0),
+    raceGroup: selectedRaceGroup,
+    raceCount: raceData[borough]?.[selectedRaceGroup]?.count || 0,
+    raceShare: raceData[borough]?.[selectedRaceGroup]?.share || 0,
+    educationGroup: selectedEducationGroup,
+    educationCount: selected.count || 0,
+    educationShare: selected.share || 0,
+    value: selected.share || 0,
+    topCrime: top.crime,
+    topCrimeCount: top.count,
+    topFive: top.topFive
+  };
+}
+function getEducationRows(borough) {
+  const obj = educationData[borough] || {};
+  return Object.entries(obj)
+    .map(([group, d]) => ({ group, count: d.count || 0, share: d.share || 0 }))
+    .sort((a,b) => b.share - a.share);
+}
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+function getTopCrime(year, borough) {
+  const obj = crimeData[year]?.[borough] || {};
+  const entries = Object.entries(obj).sort((a,b) => b[1] - a[1]);
+  if (!entries.length) return { crime: 'No data', count: 0, share: 0, topFive: [] };
+  const total = boroughTotals[year]?.[borough] || 0;
+  const [crime, count] = entries[0];
+  return {
+    crime,
+    count,
+    share: total ? count / total : 0,
+    topFive: entries.slice(0,5).map(([crime, count]) => ({
+      crime, count, share: total ? count / total : 0
+    }))
+  };
+}
+
+function getSpecificCrime(year, borough, crime) {
+  const obj = crimeData[year]?.[borough] || {};
+  const total = boroughTotals[year]?.[borough] || 0;
+  const count = obj[crime] || 0;
+  const top = getTopCrime(year, borough);
+  return {
+    crime,
+    count,
+    share: total ? count / total : 0,
+    topFive: top.topFive
+  };
+}
+
+function getBoroughMetric(borough) {
+  if (mode === 'income') return getIncomeMetric(borough);
+  if (mode === 'race') return getRaceMetric(borough);
+  if (mode === 'education') return getEducationMetric(borough);
+  const d = mode === 'top'
+    ? getTopCrime(selectedYear, borough)
+    : getSpecificCrime(selectedYear, borough, selectedCrime);
+  return {
+    borough,
+    crime: d.crime,
+    count: d.count,
+    share: d.share,
+    income: Number(incomeData[borough] || 0),
+    educationGroup: selectedEducationGroup,
+    educationCount: educationData[borough]?.[selectedEducationGroup]?.count || 0,
+    educationShare: educationData[borough]?.[selectedEducationGroup]?.share || 0,
+    value: measure === 'count' ? d.count : d.share,
+    topFive: d.topFive
+  };
+}
+
+function getAllMetrics() {
+  return BOROUGHS.map(getBoroughMetric);
+}
+
+function colorScale() {
+  const vals = getAllMetrics().map(d => d.value);
+  const max = d3.max(vals) || 1;
+  const min = d3.min(vals) || 0;
+  if (max === min) return () => COLORS[3];
+  return d3.scaleQuantize().domain([min, max]).range(COLORS);
+}
+
+function radiusScale() {
+  const vals = getAllMetrics().map(d => d.value);
+  const max = d3.max(vals) || 1;
+  return d3.scaleSqrt().domain([0, max]).range([6, 44]);
+}
+
+async function fetchGeoJSON() {
+  const urls = [
+    'https://data.cityofnewyork.us/resource/gthc-hcne.geojson?$limit=5000',
+    'https://data.cityofnewyork.us/api/geospatial/gthc-hcne?method=export&format=GeoJSON'
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data && data.features && data.features.length) return data.features;
+    } catch (e) {}
+  }
+  throw new Error('Could not load NYC Borough Boundaries GeoJSON.');
+}
+
+async function fetchCrimeYear(year) {
+  const base = 'https://data.cityofnewyork.us/resource/qgea-i56i.json';
+  const where = encodeURIComponent(`cmplnt_fr_dt between '${year}-01-01T00:00:00' and '${year}-12-31T23:59:59' AND boro_nm is not null AND ofns_desc is not null`);
+  const select = encodeURIComponent('boro_nm,ofns_desc,count(*) as cnt');
+  const url = `${base}?$select=${select}&$where=${where}&$group=boro_nm,ofns_desc&$limit=50000`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`NYPD complaint query failed for ${year} with HTTP ${res.status}.`);
+  return res.json();
+}
+
+function buildCrimeData(year, rows) {
+  crimeData[year] = {};
+  boroughTotals[year] = {};
+  for (const b of BOROUGHS) {
+    crimeData[year][b] = {};
+    boroughTotals[year][b] = 0;
+  }
+
+  for (const row of rows) {
+    const b = normalizeBoro(row.boro_nm);
+    const crime = row.ofns_desc;
+    const cnt = Number(row.cnt || 0);
+    if (!BOROUGHS.includes(b) || !crime || !cnt) continue;
+    crimeData[year][b][crime] = (crimeData[year][b][crime] || 0) + cnt;
+    boroughTotals[year][b] += cnt;
+  }
+}
+
+function populateCrimeCategories() {
+  const totals = new Map();
+  for (const year of YEARS) {
+    for (const b of BOROUGHS) {
+      const obj = crimeData[year]?.[b] || {};
+      for (const [crime, cnt] of Object.entries(obj)) {
+        totals.set(crime, (totals.get(crime) || 0) + cnt);
+      }
+    }
+  }
+  crimeCategories = Array.from(totals.entries())
+    .sort((a,b) => b[1] - a[1])
+    .map(d => d[0]);
+
+  if (!crimeCategories.length) crimeCategories = FALLBACK_CATEGORIES;
+  selectedCrime = crimeCategories[0];
+
+  crimeSelect.innerHTML = crimeCategories.slice(0,25).map(c =>
+    `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
+  ).join('');
+  crimeSelect.value = selectedCrime;
+}
+
+function draw() {
+  if (!geoFeatures.length) return;
+
+  svg.selectAll('*').remove();
+
+  const featuresWithNames = geoFeatures
+    .map(f => ({ feature: f, borough: getBoroName(f) }))
+    .filter(d => BOROUGHS.includes(d.borough));
+
+  if (!featuresWithNames.length) {
+    statusEl.className = 'status error';
+    statusEl.textContent = 'Borough boundaries loaded, but borough names could not be identified.';
+    return;
+  }
+
+  projection.fitSize([width - 30, height - 30], {
+    type: 'FeatureCollection',
+    features: featuresWithNames.map(d => d.feature)
+  });
+
+  svg.append('rect')
+    .attr('width', width)
+    .attr('height', height)
+    .attr('fill', '#cde7f7');
+
+  const cScale = colorScale();
+
+  svg.selectAll('path.borough-path')
+    .data(featuresWithNames)
+    .join('path')
+    .attr('class', 'borough-path')
+    .attr('d', d => path(d.feature))
+    .attr('fill', d => mapType === 'choropleth' ? cScale(getBoroughMetric(d.borough).value) : '#d9e5ef')
+    .attr('opacity', 0.96)
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('opacity', 0.78);
+      showTooltip(event, d.borough);
+    })
+    .on('mousemove', function(event, d) {
+      moveTooltip(event);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('opacity', 0.96);
+      hideTooltip();
+    })
+    .on('click', function(event, d) {
+      showTooltip(event, d.borough);
+    });
+
+  const centroids = new Map();
+  featuresWithNames.forEach(d => {
+    const c = path.centroid(d.feature);
+    centroids.set(d.borough, c);
+  });
+
+  // Fine tune labels/bubbles so they feel centered.
+  const labelOffsets = {
+    'Manhattan': [-10, 0],
+    'Bronx': [10, -6],
+    'Brooklyn': [-6, 8],
+    'Queens': [28, 12],
+    'Staten Island': [-6, 8]
+  };
+
+  if (mapType === 'bubble') {
+    const rScale = radiusScale();
+    BOROUGHS.forEach(b => {
+      const c = centroids.get(b);
+      if (!c) return;
+      const [dx, dy] = labelOffsets[b] || [0,0];
+      const metric = getBoroughMetric(b);
+      svg.append('circle')
+        .attr('class','bubble')
+        .attr('cx', c[0] + dx)
+        .attr('cy', c[1] + dy)
+        .attr('r', rScale(metric.value))
+        .on('mouseenter', event => showTooltip(event, b))
+        .on('mousemove', event => moveTooltip(event))
+        .on('mouseleave', hideTooltip)
+        .on('click', event => showTooltip(event, b));
+    });
+  }
+
+  BOROUGHS.forEach(b => {
+    const c = centroids.get(b);
+    if (!c) return;
+    const [dx, dy] = labelOffsets[b] || [0,0];
+    svg.append('text')
+      .attr('class','borough-label')
+      .attr('x', c[0] + dx)
+      .attr('y', c[1] + dy + 4)
+      .attr('text-anchor','middle')
+      .text(b === 'Staten Island' ? 'Staten Is.' : b);
+  });
+
+  updateLegend();
+  updateTable();
+}
+
+function showTooltip(event, borough) {
+  const metric = getBoroughMetric(borough);
+  const total = boroughTotals[selectedYear]?.[borough] || 0;
+  const topRows = metric.topFive.length
+    ? metric.topFive.map(d => `<div class="tt-row"><span>${escapeHtml(d.crime)}</span><span class="tt-val">${fmt(d.count)} (${pct(d.share)})</span></div>`).join('')
+    : '<div class="tt-row"><span>No data</span><span class="tt-val">—</span></div>';
+
+  const income = Number(incomeData[borough] || 0);
+  const raceRows = getRaceRows(borough);
+  const eduRows = getEducationRows(borough);
+  const largestRace = getLargestRaceGroup(borough);
+  const raceSelected = raceData[borough]?.[selectedRaceGroup] || {count: 0, share: 0};
+  const eduSelected = educationData[borough]?.[selectedEducationGroup] || {count: 0, share: 0};
+  const raceList = raceRows.length
+    ? raceRows.slice(0,5).map(d => `<div class="tt-row"><span>${escapeHtml(d.group)}</span><span class="tt-val">${pct(d.share)}</span></div>`).join('')
+    : '<div class="tt-row"><span>No race/ethnicity data</span><span class="tt-val">—</span></div>';
+  const eduList = eduRows.length
+    ? eduRows.map(d => `<div class="tt-row"><span>${escapeHtml(d.group)}</span><span class="tt-val">${pct(d.share)}</span></div>`).join('')
+    : '<div class="tt-row"><span>No education data</span><span class="tt-val">—</span></div>';
+
+  const viewLabel = mode === 'education' ? 'Education levels view' : (mode === 'race' ? 'Race/ethnicity view' : (mode === 'income' ? 'Income levels view' : (mode === 'top' ? 'Top crime view' : 'Specific crime view')));
+  const label = mode === 'education' ? 'Selected education group' : (mode === 'race' ? 'Selected race/ethnicity group' : (mode === 'income' ? 'Income layer' : (mode === 'top' ? 'Top crime category' : 'Selected crime category')));
+  const valueLabel = mode === 'education' ? 'Selected education share' : (mode === 'race' ? 'Selected group share' : (mode === 'income' ? 'Median household income' : (measure === 'count' ? 'Displayed value' : 'Displayed borough share')));
+  const valueText = mode === 'education' ? `${pct(eduSelected.share)} (${fmt(eduSelected.count)} adults age 25+)` : (mode === 'race' ? `${pct(raceSelected.share)} (${fmt(raceSelected.count)} residents)` : (mode === 'income' ? fmtMoney(income) : (measure === 'count' ? fmt(metric.count) : pct(metric.share))));
+
+  tooltip.innerHTML = `
+    <div class="tt-title">${escapeHtml(borough)}</div>
+    <div class="tt-sub">${selectedYear} crime data • ${escapeHtml(incomeSourceYear)} income • ${escapeHtml(raceSourceYear)} race/ethnicity • ${escapeHtml(educationSourceYear)} education • ${viewLabel}</div>
+    <div class="tt-row"><span>${label}</span><span class="tt-val">${mode === 'income' ? escapeHtml(incomeTier(income)) : escapeHtml(safeCrime(metric.crime))}</span></div>
+    <div class="tt-row"><span>${valueLabel}</span><span class="tt-val">${valueText}</span></div>
+    <div class="tt-row"><span>Selected education group</span><span class="tt-val">${escapeHtml(selectedEducationGroup)} (${pct(eduSelected.share)})</span></div>
+    <div class="tt-row"><span>Largest race/ethnicity group</span><span class="tt-val">${escapeHtml(largestRace.group)} (${pct(largestRace.share)})</span></div>
+    <div class="tt-row"><span>Median household income</span><span class="tt-val">${fmtMoney(income)}</span></div>
+    <div class="tt-row"><span>Income tier</span><span class="tt-val">${escapeHtml(incomeTier(income))}</span></div>
+    <div class="tt-row"><span>Top crime category</span><span class="tt-val">${escapeHtml(safeCrime(getTopCrime(selectedYear, borough).crime))}</span></div>
+    <div class="tt-row"><span>Total borough complaints</span><span class="tt-val">${fmt(total)}</span></div>
+    <div style="margin-top:10px;font-weight:800;color:#9a5b00;">Education breakdown, adults age 25+</div>
+    ${eduList}
+    <div style="margin-top:10px;font-weight:800;color:#5b2a86;">Race/ethnicity breakdown</div>
+    ${raceList}
+    <div style="margin-top:10px;font-weight:800;color:#1F4E79;">Top five crime categories</div>
+    ${topRows}
+  `;
+  tooltip.style.display = 'block';
+  moveTooltip(event);
+}
+
+function moveTooltip(event) {
+  const pad = 16;
+  let x = event.clientX + pad;
+  let y = event.clientY + pad;
+  const rect = tooltip.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - 8) x = event.clientX - rect.width - pad;
+  if (y + rect.height > window.innerHeight - 8) y = event.clientY - rect.height - pad;
+  tooltip.style.left = Math.max(8, x) + 'px';
+  tooltip.style.top = Math.max(8, y) + 'px';
+}
+
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+function updateLegend() {
+  const vals = getAllMetrics().map(d => d.value);
+  const max = d3.max(vals) || 1;
+  if (mapType === 'bubble') {
+    const label = mode === 'education' ? `share of ${selectedEducationGroup}` : (mode === 'race' ? `share of ${selectedRaceGroup}` : (mode === 'income' ? 'median household income' : (measure === 'count' ? 'raw complaint count' : 'share of borough complaints')));
+    legendEl.innerHTML = `<span>Bubble size = ${label}</span>`;
+    return;
+  }
+  let html = '<span>Low</span>';
+  COLORS.forEach(c => html += `<span class="legend-swatch" style="background:${c}"></span>`);
+  const label = mode === 'education' ? `Share of ${selectedEducationGroup}` : (mode === 'race' ? `Share of ${selectedRaceGroup}` : (mode === 'income' ? 'Median household income' : (measure === 'count' ? 'Raw count' : 'Share of borough crime')));
+  html += `<span>High</span><span style="margin-left:10px;">${label}</span>`;
+  legendEl.innerHTML = html;
+}
+
+function updateTable() {
+  const rows = getAllMetrics().sort((a,b) => b.value - a.value);
+  document.getElementById('panelTitle').textContent =
+    mode === 'education' ? `${selectedEducationGroup} by borough` :
+    (mode === 'race' ? `${selectedRaceGroup} by borough` :
+    (mode === 'income' ? `Median household income by borough` :
+    (mode === 'top' ? `Top crime by borough, ${selectedYear}` : `${selectedCrime}, ${selectedYear}`)));
+  document.getElementById('valueHeader').textContent =
+    mode === 'education' ? 'Share' : (mode === 'race' ? 'Share' : (mode === 'income' ? 'Income' : (measure === 'count' ? 'Count' : 'Share')));
+
+  rankBody.innerHTML = rows.map(d => `
+    <tr>
+      <td><strong>${escapeHtml(d.borough)}</strong></td>
+      <td>${mode === 'education'
+        ? `<span class="edu-pill">${escapeHtml(d.educationGroup)}</span><br><span style="font-size:11px;color:#64748b;">Income: ${fmtMoney(d.income)} • Largest group: ${escapeHtml(getLargestRaceGroup(d.borough).group)} • Top crime: ${escapeHtml(safeCrime(d.topCrime))}</span>`
+        : (mode === 'race'
+          ? `<span class="race-pill">${escapeHtml(d.raceGroup)}</span><br><span style="font-size:11px;color:#64748b;">Largest group: ${escapeHtml(d.largestRaceGroup)} • Education: ${pct(educationData[d.borough]?.[selectedEducationGroup]?.share || 0)} • Income: ${fmtMoney(d.income)} • Top crime: ${escapeHtml(safeCrime(d.topCrime))}</span>`
+          : (mode === 'income'
+            ? `<span class="income-pill">${escapeHtml(incomeTier(d.income))}</span><br><span style="font-size:11px;color:#64748b;">Education: ${pct(educationData[d.borough]?.[selectedEducationGroup]?.share || 0)} • Largest group: ${escapeHtml(getLargestRaceGroup(d.borough).group)} • Top crime: ${escapeHtml(safeCrime(d.topCrime))}</span>`
+            : `<span class="crime-pill">${escapeHtml(safeCrime(d.crime))}</span><br><span style="font-size:11px;color:#64748b;">Income: ${fmtMoney(d.income)} • Education: ${pct(educationData[d.borough]?.[selectedEducationGroup]?.share || 0)} • Largest group: ${escapeHtml(getLargestRaceGroup(d.borough).group)}</span>`))}
+      </td>
+      <td><strong>${mode === 'education' ? pct(d.educationShare) : (mode === 'race' ? pct(d.raceShare) : (mode === 'income' ? fmtMoney(d.income) : (measure === 'count' ? fmt(d.count) : pct(d.share))))}</strong></td>
+    </tr>
+  `).join('');
+}
+
+function setMode(nextMode) {
+  mode = nextMode;
+  document.getElementById('btn-top').classList.toggle('active', mode === 'top');
+  document.getElementById('btn-specific').classList.toggle('active', mode === 'specific');
+  document.getElementById('btn-income').classList.toggle('active', mode === 'income');
+  document.getElementById('btn-race').classList.toggle('active', mode === 'race');
+  document.getElementById('btn-education').classList.toggle('active', mode === 'education');
+  crimeSelect.disabled = mode !== 'specific';
+  raceSelect.disabled = mode !== 'race';
+  educationSelect.disabled = mode !== 'education';
+  document.getElementById('btn-count').disabled = mode === 'income' || mode === 'race' || mode === 'education';
+  document.getElementById('btn-share').disabled = mode === 'income' || mode === 'race' || mode === 'education';
+  draw();
+}
+
+function setMeasure(nextMeasure) {
+  measure = nextMeasure;
+  document.getElementById('btn-count').classList.toggle('active', measure === 'count');
+  document.getElementById('btn-share').classList.toggle('active', measure === 'share');
+  draw();
+}
+
+function setMapType(nextType) {
+  mapType = nextType;
+  document.getElementById('btn-choro').classList.toggle('active', mapType === 'choropleth');
+  document.getElementById('btn-bubble').classList.toggle('active', mapType === 'bubble');
+  draw();
+}
+
+function setCrime(crime) {
+  selectedCrime = crime;
+  draw();
+}
+
+function setRaceGroup(group) {
+  selectedRaceGroup = group;
+  draw();
+}
+
+function setEducationGroup(group) {
+  selectedEducationGroup = group;
+  draw();
+}
+
+document.getElementById('yearSlider').addEventListener('input', function() {
+  selectedYear = Number(this.value);
+  document.getElementById('yearLabel').textContent = selectedYear;
+  draw();
+});
+
+async function fetchIncomeData() {
+  const countyToBoro = {
+    '005': 'Bronx',
+    '047': 'Brooklyn',
+    '061': 'Manhattan',
+    '081': 'Queens',
+    '085': 'Staten Island'
+  };
+
+  const attempts = [
+    {
+      year: '2024 ACS 5-Year',
+      url: 'https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E&for=county:*&in=state:36'
+    },
+    {
+      year: '2023 ACS 5-Year',
+      url: 'https://api.census.gov/data/2023/acs/acs5?get=NAME,B19013_001E&for=county:*&in=state:36'
+    }
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url);
+      if (!res.ok) continue;
+      const rows = await res.json();
+      const header = rows[0];
+      const nameIdx = header.indexOf('NAME');
+      const incomeIdx = header.indexOf('B19013_001E');
+      const countyIdx = header.indexOf('county');
+      const out = {};
+      for (const row of rows.slice(1)) {
+        const county = row[countyIdx];
+        const boro = countyToBoro[county];
+        const income = Number(row[incomeIdx]);
+        if (boro && income > 0) out[boro] = income;
+      }
+      if (BOROUGHS.every(b => out[b])) {
+        incomeData = out;
+        incomeSourceYear = attempt.year;
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // Fallback values are only used if the Census API is temporarily unavailable.
+  // They keep the map usable and are labeled as fallback estimates.
+  incomeData = {
+    'Bronx': 50500,
+    'Brooklyn': 81200,
+    'Manhattan': 106400,
+    'Queens': 82600,
+    'Staten Island': 96100
+  };
+  incomeSourceYear = 'fallback ACS-style estimates';
+}
+
+async function fetchRaceData() {
+  const countyToBoro = {
+    '005': 'Bronx',
+    '047': 'Brooklyn',
+    '061': 'Manhattan',
+    '081': 'Queens',
+    '085': 'Staten Island'
+  };
+
+  const vars = [
+    'B03002_001E', // Total
+    'B03002_003E', // Not Hispanic White alone
+    'B03002_004E', // Not Hispanic Black alone
+    'B03002_005E', // Not Hispanic AIAN alone
+    'B03002_006E', // Not Hispanic Asian alone
+    'B03002_007E', // Not Hispanic NHPI alone
+    'B03002_008E', // Not Hispanic Some other race alone
+    'B03002_009E', // Not Hispanic Two or more races
+    'B03002_012E'  // Hispanic or Latino
+  ];
+
+  const attempts = [
+    {
+      year: '2024 ACS 5-Year',
+      url: `https://api.census.gov/data/2024/acs/acs5?get=NAME,${vars.join(',')}&for=county:*&in=state:36`
+    },
+    {
+      year: '2023 ACS 5-Year',
+      url: `https://api.census.gov/data/2023/acs/acs5?get=NAME,${vars.join(',')}&for=county:*&in=state:36`
+    }
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url);
+      if (!res.ok) continue;
+      const rows = await res.json();
+      const header = rows[0];
+      const countyIdx = header.indexOf('county');
+      const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+      const out = {};
+
+      for (const row of rows.slice(1)) {
+        const boro = countyToBoro[row[countyIdx]];
+        if (!boro) continue;
+        const total = Number(row[idx['B03002_001E']] || 0);
+        const groupCounts = {
+          'White alone, not Hispanic': Number(row[idx['B03002_003E']] || 0),
+          'Black or African American alone, not Hispanic': Number(row[idx['B03002_004E']] || 0),
+          'American Indian/Alaska Native alone, not Hispanic': Number(row[idx['B03002_005E']] || 0),
+          'Asian alone, not Hispanic': Number(row[idx['B03002_006E']] || 0),
+          'Native Hawaiian/Pacific Islander alone, not Hispanic': Number(row[idx['B03002_007E']] || 0),
+          'Some other race alone, not Hispanic': Number(row[idx['B03002_008E']] || 0),
+          'Two or more races, not Hispanic': Number(row[idx['B03002_009E']] || 0),
+          'Hispanic or Latino': Number(row[idx['B03002_012E']] || 0)
+        };
+        out[boro] = {};
+        for (const [group, count] of Object.entries(groupCounts)) {
+          out[boro][group] = { count, share: total ? count / total : 0 };
+        }
+      }
+
+      if (BOROUGHS.every(b => out[b])) {
+        raceData = out;
+        raceSourceYear = attempt.year;
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // Fallback values are only used if the Census API is temporarily unavailable.
+  // They are broad ACS-style borough estimates to keep the demo map usable.
+  const fallback = {
+    'Bronx': {'Hispanic or Latino':0.56,'Black or African American alone, not Hispanic':0.29,'White alone, not Hispanic':0.08,'Asian alone, not Hispanic':0.04,'Two or more races, not Hispanic':0.02,'Some other race alone, not Hispanic':0.005,'American Indian/Alaska Native alone, not Hispanic':0.003,'Native Hawaiian/Pacific Islander alone, not Hispanic':0.001},
+    'Brooklyn': {'White alone, not Hispanic':0.36,'Black or African American alone, not Hispanic':0.27,'Hispanic or Latino':0.19,'Asian alone, not Hispanic':0.13,'Two or more races, not Hispanic':0.04,'Some other race alone, not Hispanic':0.005,'American Indian/Alaska Native alone, not Hispanic':0.003,'Native Hawaiian/Pacific Islander alone, not Hispanic':0.001},
+    'Manhattan': {'White alone, not Hispanic':0.46,'Hispanic or Latino':0.25,'Asian alone, not Hispanic':0.14,'Black or African American alone, not Hispanic':0.12,'Two or more races, not Hispanic':0.03,'Some other race alone, not Hispanic':0.004,'American Indian/Alaska Native alone, not Hispanic':0.002,'Native Hawaiian/Pacific Islander alone, not Hispanic':0.001},
+    'Queens': {'Asian alone, not Hispanic':0.28,'Hispanic or Latino':0.28,'White alone, not Hispanic':0.24,'Black or African American alone, not Hispanic':0.16,'Two or more races, not Hispanic':0.03,'Some other race alone, not Hispanic':0.005,'American Indian/Alaska Native alone, not Hispanic':0.003,'Native Hawaiian/Pacific Islander alone, not Hispanic':0.001},
+    'Staten Island': {'White alone, not Hispanic':0.55,'Hispanic or Latino':0.19,'Black or African American alone, not Hispanic':0.10,'Asian alone, not Hispanic':0.11,'Two or more races, not Hispanic':0.04,'Some other race alone, not Hispanic':0.005,'American Indian/Alaska Native alone, not Hispanic':0.003,'Native Hawaiian/Pacific Islander alone, not Hispanic':0.001}
+  };
+  const popFallback = {'Bronx':1470000,'Brooklyn':2700000,'Manhattan':1650000,'Queens':2400000,'Staten Island':500000};
+  raceData = {};
+  for (const [boro, groups] of Object.entries(fallback)) {
+    raceData[boro] = {};
+    for (const [group, share] of Object.entries(groups)) {
+      raceData[boro][group] = { share, count: Math.round((popFallback[boro] || 0) * share) };
+    }
+  }
+  raceSourceYear = 'fallback ACS-style estimates';
+}
+
+async function fetchEducationData() {
+  const countyToBoro = {
+    '005': 'Bronx',
+    '047': 'Brooklyn',
+    '061': 'Manhattan',
+    '081': 'Queens',
+    '085': 'Staten Island'
+  };
+
+  // ACS B15003: Educational Attainment for Population 25 Years and Over.
+  // Denominator: B15003_001E. High school or higher = B15003_017E through B15003_025E.
+  // Some college or associate's = B15003_019E through B15003_021E.
+  // Bachelor's degree or higher = B15003_022E through B15003_025E.
+  const vars = [
+    'B15003_001E',
+    'B15003_002E','B15003_003E','B15003_004E','B15003_005E','B15003_006E','B15003_007E','B15003_008E','B15003_009E','B15003_010E','B15003_011E','B15003_012E','B15003_013E','B15003_014E','B15003_015E','B15003_016E',
+    'B15003_017E','B15003_018E','B15003_019E','B15003_020E','B15003_021E','B15003_022E','B15003_023E','B15003_024E','B15003_025E'
+  ];
+
+  const attempts = [
+    {
+      year: '2024 ACS 5-Year',
+      url: `https://api.census.gov/data/2024/acs/acs5?get=NAME,${vars.join(',')}&for=county:*&in=state:36`
+    },
+    {
+      year: '2023 ACS 5-Year',
+      url: `https://api.census.gov/data/2023/acs/acs5?get=NAME,${vars.join(',')}&for=county:*&in=state:36`
+    }
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url);
+      if (!res.ok) continue;
+      const rows = await res.json();
+      const header = rows[0];
+      const countyIdx = header.indexOf('county');
+      const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+      const out = {};
+
+      for (const row of rows.slice(1)) {
+        const boro = countyToBoro[row[countyIdx]];
+        if (!boro) continue;
+
+        const total = Number(row[idx['B15003_001E']] || 0);
+        const lessThanHS = [
+          'B15003_002E','B15003_003E','B15003_004E','B15003_005E','B15003_006E','B15003_007E','B15003_008E','B15003_009E','B15003_010E','B15003_011E','B15003_012E','B15003_013E','B15003_014E','B15003_015E','B15003_016E'
+        ].reduce((sum, v) => sum + Number(row[idx[v]] || 0), 0);
+        const hsHigher = [
+          'B15003_017E','B15003_018E','B15003_019E','B15003_020E','B15003_021E','B15003_022E','B15003_023E','B15003_024E','B15003_025E'
+        ].reduce((sum, v) => sum + Number(row[idx[v]] || 0), 0);
+        const someCollegeAssoc = ['B15003_019E','B15003_020E','B15003_021E'].reduce((sum, v) => sum + Number(row[idx[v]] || 0), 0);
+        const bachelors = Number(row[idx['B15003_022E']] || 0);
+        const gradProfessional = ['B15003_023E','B15003_024E','B15003_025E'].reduce((sum, v) => sum + Number(row[idx[v]] || 0), 0);
+        const bachelorsHigher = bachelors + gradProfessional;
+
+        const groups = {
+          'Bachelor\'s degree or higher': bachelorsHigher,
+          'Graduate or professional degree': gradProfessional,
+          'High school graduate or higher': hsHigher,
+          'Less than high school diploma': lessThanHS,
+          'Some college or associate\'s degree': someCollegeAssoc,
+          'Bachelor\'s degree': bachelors
+        };
+
+        out[boro] = {};
+        for (const [group, count] of Object.entries(groups)) {
+          out[boro][group] = { count, share: total ? count / total : 0 };
+        }
+      }
+
+      if (BOROUGHS.every(b => out[b])) {
+        educationData = out;
+        educationSourceYear = attempt.year;
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // Fallback values are broad ACS-style borough estimates used only if Census API is unavailable.
+  const fallbackShares = {
+    'Bronx': {"Bachelor's degree or higher":0.23,'Graduate or professional degree':0.09,'High school graduate or higher':0.75,'Less than high school diploma':0.25,"Some college or associate's degree":0.25,"Bachelor's degree":0.14},
+    'Brooklyn': {"Bachelor's degree or higher":0.43,'Graduate or professional degree':0.18,'High school graduate or higher':0.84,'Less than high school diploma':0.16,"Some college or associate's degree":0.23,"Bachelor's degree":0.25},
+    'Manhattan': {"Bachelor's degree or higher":0.65,'Graduate or professional degree':0.33,'High school graduate or higher':0.90,'Less than high school diploma':0.10,"Some college or associate's degree":0.15,"Bachelor's degree":0.32},
+    'Queens': {"Bachelor's degree or higher":0.36,'Graduate or professional degree':0.14,'High school graduate or higher':0.82,'Less than high school diploma':0.18,"Some college or associate's degree":0.24,"Bachelor's degree":0.22},
+    'Staten Island': {"Bachelor's degree or higher":0.35,'Graduate or professional degree':0.13,'High school graduate or higher':0.89,'Less than high school diploma':0.11,"Some college or associate's degree":0.28,"Bachelor's degree":0.22}
+  };
+  const adultPop = {'Bronx':980000,'Brooklyn':1880000,'Manhattan':1280000,'Queens':1700000,'Staten Island':350000};
+  educationData = {};
+  for (const [boro, groups] of Object.entries(fallbackShares)) {
+    educationData[boro] = {};
+    for (const [group, share] of Object.entries(groups)) {
+      educationData[boro][group] = { share, count: Math.round((adultPop[boro] || 0) * share) };
+    }
+  }
+  educationSourceYear = 'fallback ACS-style estimates';
+}
+
+async function init() {
+  try {
+    statusEl.className = 'status';
+    statusEl.textContent = 'Loading NYC borough boundaries…';
+    geoFeatures = await fetchGeoJSON();
+
+    statusEl.textContent = 'Loading NYPD complaint counts for 2021–2025 plus ACS income, racial/ethnic, and education data…';
+    const [allRows] = await Promise.all([
+      Promise.all(YEARS.map(fetchCrimeYear)),
+      fetchIncomeData(),
+      fetchRaceData(),
+      fetchEducationData()
+    ]);
+    YEARS.forEach((year, idx) => buildCrimeData(year, allRows[idx]));
+
+    populateCrimeCategories();
+    raceSelect.value = selectedRaceGroup;
+    educationSelect.value = selectedEducationGroup;
+
+    const loadedRows = YEARS.reduce((sum, y) => {
+      return sum + BOROUGHS.reduce((bSum, b) => bSum + Object.keys(crimeData[y]?.[b] || {}).length, 0);
+    }, 0);
+
+    statusEl.className = 'status ok';
+    statusEl.textContent = `Loaded successfully. Hover over a borough to view top crime details and median household income. Processed grouped offense counts for ${YEARS.length} years across the five boroughs and loaded ${incomeSourceYear} income, ${raceSourceYear} race/ethnicity, and ${educationSourceYear} education data.`;
+
+    draw();
+
+    if (!loadedRows) {
+      statusEl.className = 'status error';
+      statusEl.textContent = 'The map loaded, but the NYPD complaint query returned no usable grouped offense data.';
+    }
+  } catch (err) {
+    console.error(err);
+    statusEl.className = 'status error';
+    statusEl.innerHTML = `<strong>Data failed to load.</strong> ${escapeHtml(err.message)} Open this file in Chrome or Edge with internet access.`;
+    rankBody.innerHTML = '<tr><td colspan="3">No data loaded.</td></tr>';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
